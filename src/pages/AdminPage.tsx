@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Loader2, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { formatRupiah, formatWeight } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import type { Product } from '@/types/marketplace';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -16,17 +16,13 @@ export default function AdminPage() {
 
   const loadProducts = useCallback(async () => {
     setLoadState('loading');
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error || !Array.isArray(data)) {
+    try {
+      const data = await apiRequest<Product[]>('products');
+      setProducts(data);
+      setLoadState('ready');
+    } catch {
       setLoadState('error');
-      return;
     }
-    setProducts(data as Product[]);
-    setLoadState('ready');
   }, []);
 
   useEffect(() => {
@@ -44,14 +40,15 @@ export default function AdminPage() {
   const deleteProduct = async (product: Product) => {
     setDeletingId(product.id);
     setActionError(null);
-    const { data, error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', product.id)
-      .select('id');
+    let failed = false;
+    try {
+      await apiRequest(`products/${product.id}`, { method: 'DELETE' });
+    } catch {
+      failed = true;
+    }
     setDeletingId(null);
     setConfirmingId(null);
-    if (error || !Array.isArray(data) || data.length === 0) {
+    if (failed) {
       setActionError(`We could not delete "${product.name}". Please try again.`);
       return;
     }

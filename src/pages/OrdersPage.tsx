@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ChevronDown, Loader2, ReceiptText } from 'lucide-react';
 import BillingSummary from '@/components/BillingSummary';
 import { formatDateTime, formatRupiah } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import type { Order } from '@/types/marketplace';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -14,19 +14,13 @@ export default function OrdersPage() {
 
   const loadOrders = useCallback(async () => {
     setLoadState('loading');
-    const { data, error } = await supabase
-      .from('orders')
-      .select(
-        'id, status, total_idr, created_at, order_items(id, product_id, product_name, unit_price_idr, quantity, line_total_idr), usage_meters(metric, quantity, unit_rate_idr, cost_idr)',
-      )
-      .order('created_at', { ascending: false });
-
-    if (error || !Array.isArray(data)) {
+    try {
+      const data = await apiRequest<Order[]>('orders');
+      setOrders(data);
+      setLoadState('ready');
+    } catch {
       setLoadState('error');
-      return;
     }
-    setOrders(data as unknown as Order[]);
-    setLoadState('ready');
   }, []);
 
   useEffect(() => {

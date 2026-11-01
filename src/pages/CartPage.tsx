@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle2, Loader2, Minus, Plus, ShoppingBag, ShoppingC
 import BillingSummary from '@/components/BillingSummary';
 import { fetchBillingQuote, placeOrder } from '@/lib/billing';
 import { formatRupiah } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import type { BillingQuote, CartLine } from '@/types/marketplace';
 
 const MAX_QUANTITY = 999;
@@ -30,18 +30,14 @@ export default function CartPage({ onCartChange, onGoToOrders, onGoToShop }: Car
   const loadCart = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const { data, error } = await supabase
-      .from('cart_items')
-      .select('id, product_id, quantity, product:products(*)')
-      .order('created_at', { ascending: true });
-
-    if (error || !Array.isArray(data)) {
+    try {
+      const data = await apiRequest<CartLine[]>('cart');
+      setLines(data);
+      setLoading(false);
+    } catch {
       setLoadError('We could not load your cart. Please try again.');
       setLoading(false);
-      return;
     }
-    setLines(data as unknown as CartLine[]);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -82,8 +78,9 @@ export default function CartPage({ onCartChange, onGoToOrders, onGoToShop }: Car
     if (capped === line.quantity) return;
 
     setActionError(null);
-    const { error } = await supabase.from('cart_items').update({ quantity: capped }).eq('id', line.id);
-    if (error) {
+    try {
+      await apiRequest(`cart/${line.id}`, { method: 'PATCH', body: { quantity: capped } });
+    } catch {
       setActionError('Could not update the quantity. Please try again.');
       return;
     }
@@ -93,8 +90,9 @@ export default function CartPage({ onCartChange, onGoToOrders, onGoToShop }: Car
 
   const removeLine = async (line: CartLine) => {
     setActionError(null);
-    const { error } = await supabase.from('cart_items').delete().eq('id', line.id);
-    if (error) {
+    try {
+      await apiRequest(`cart/${line.id}`, { method: 'DELETE' });
+    } catch {
       setActionError('Could not remove this item. Please try again.');
       return;
     }

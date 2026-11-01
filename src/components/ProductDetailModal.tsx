@@ -3,7 +3,7 @@ import { CheckCircle2, Loader2, Minus, Plus, Scale, ShoppingCart } from 'lucide-
 import Modal from '@/components/Modal';
 import { useAuth } from '@/context/AuthContext';
 import { formatRupiah, formatWeight } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import type { Product } from '@/types/marketplace';
 
 const MAX_QUANTITY = 999;
@@ -34,30 +34,15 @@ export default function ProductDetailModal({ product, onClose, onCartChange, onG
   const addToCart = async () => {
     setAdding(true);
     setError(null);
-
-    const { data: existing, error: readError } = await supabase
-      .from('cart_items')
-      .select('id, quantity')
-      .eq('product_id', product.id)
-      .maybeSingle();
-
-    if (readError) {
+    try {
+      await apiRequest('cart', { method: 'POST', body: { product_id: product.id, quantity } });
+    } catch {
       setAdding(false);
-      setError('Could not update your cart. Please try again.');
-      return;
-    }
-
-    const nextQuantity = Math.min((existing?.quantity ?? 0) + quantity, maxQuantity);
-    const { error: writeError } = existing
-      ? await supabase.from('cart_items').update({ quantity: nextQuantity }).eq('id', existing.id)
-      : await supabase.from('cart_items').insert({ product_id: product.id, quantity: nextQuantity });
-
-    setAdding(false);
-    if (writeError) {
       setError('Could not add this item to your cart. Please try again.');
       return;
     }
 
+    setAdding(false);
     setAdded(true);
     onCartChange();
   };

@@ -1,13 +1,19 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  full_name: string;
+  is_admin: boolean;
+};
+
+type Session = { user: AuthUser } | null;
 type AuthContextValue = {
   session: Session | null;
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
-  recovering: boolean;
-  clearRecovery: () => void;
+  acceptUser: (user: AuthUser) => void;
   signOut: () => Promise<void>;
 };
 
@@ -16,41 +22,37 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     let active = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
-      setSession(nextSession);
-      setLoading(false);
-    });
+    apiRequest<{ user: AuthUser | null }>('auth/session')
+      .then(({ user }) => {
+        if (active) setSession(user ? { user } : null);
+      })
+      .catch(() => {
+        if (active) setSession(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
     return () => {
       active = false;
-      listener.subscription.unsubscribe();
     };
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await apiRequest<{ ok: boolean }>('auth/signout', { method: 'POST', body: {} });
+    setSession(null);
   };
 
-  const clearRecovery = () => setRecovering(false);
+  const acceptUser = (user: AuthUser) => setSession({ user });
 
   const value: AuthContextValue = {
     session,
     user: session?.user ?? null,
     loading,
-    recovering,
-    clearRecovery,
+    acceptUser,
     signOut,
   };
 

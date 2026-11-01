@@ -2,14 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import AuthScreen from '@/components/AuthScreen';
-import ResetPasswordScreen from '@/components/ResetPasswordScreen';
 import AppHeader from '@/components/AppHeader';
 import ShopPage from '@/pages/ShopPage';
 import CartPage from '@/pages/CartPage';
 import OrdersPage from '@/pages/OrdersPage';
 import SellerPage from '@/pages/SellerPage';
 import AdminPage from '@/pages/AdminPage';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import type { View } from '@/types/marketplace';
 
 function MarketplaceShell() {
@@ -20,10 +19,12 @@ function MarketplaceShell() {
   const userId = user?.id ?? null;
 
   const refreshCartCount = useCallback(async () => {
-    const { count, error } = await supabase
-      .from('cart_items')
-      .select('id', { count: 'exact', head: true });
-    if (!error) setCartCount(count ?? 0);
+    try {
+      const { count } = await apiRequest<{ count: number }>('cart-count');
+      setCartCount(count);
+    } catch {
+      setCartCount(0);
+    }
   }, []);
 
   useEffect(() => {
@@ -31,20 +32,8 @@ function MarketplaceShell() {
   }, [refreshCartCount]);
 
   useEffect(() => {
-    if (!userId) return;
-    let active = true;
-    supabase
-      .from('app_admins')
-      .select('user_id')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (active && !error) setIsAdmin(data !== null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [userId]);
+    setIsAdmin(user?.is_admin ?? false);
+  }, [userId, user?.is_admin]);
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -67,7 +56,7 @@ function MarketplaceShell() {
 }
 
 function Root() {
-  const { session, loading, recovering } = useAuth();
+  const { session, loading } = useAuth();
 
   if (loading) {
     return (
@@ -77,7 +66,6 @@ function Root() {
     );
   }
 
-  if (recovering) return <ResetPasswordScreen />;
   if (!session) return <AuthScreen />;
 
   return <MarketplaceShell />;

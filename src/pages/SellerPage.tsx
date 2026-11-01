@@ -3,7 +3,7 @@ import { AlertCircle, Loader2, Package, Pencil, Plus, Trash2 } from 'lucide-reac
 import ProductFormModal from '@/components/ProductFormModal';
 import { useAuth } from '@/context/AuthContext';
 import { formatRupiah, formatWeight } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import type { Product } from '@/types/marketplace';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -21,18 +21,13 @@ export default function SellerPage() {
   const loadProducts = useCallback(async () => {
     if (!user) return;
     setLoadState('loading');
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('seller_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error || !Array.isArray(data)) {
+    try {
+      const data = await apiRequest<Product[]>('seller/products');
+      setProducts(data);
+      setLoadState('ready');
+    } catch {
       setLoadState('error');
-      return;
     }
-    setProducts(data as Product[]);
-    setLoadState('ready');
   }, [user]);
 
   useEffect(() => {
@@ -42,10 +37,15 @@ export default function SellerPage() {
   const deleteProduct = async (product: Product) => {
     setDeletingId(product.id);
     setActionError(null);
-    const { error } = await supabase.from('products').delete().eq('id', product.id);
+    let failed = false;
+    try {
+      await apiRequest(`products/${product.id}`, { method: 'DELETE' });
+    } catch {
+      failed = true;
+    }
     setDeletingId(null);
     setConfirmingId(null);
-    if (error) {
+    if (failed) {
       setActionError('We could not delete this product. Please try again.');
       return;
     }

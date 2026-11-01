@@ -29,7 +29,7 @@ export default function AppHeader({ view, onNavigate, cartCount, isAdmin }: AppH
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const displayName = (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? 'Account';
+  const displayName = user?.full_name ?? user?.email ?? 'Account';
 
   return (
     <header

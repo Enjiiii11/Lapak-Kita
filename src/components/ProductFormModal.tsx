@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import Modal from '@/components/Modal';
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { PRODUCT_CATEGORIES, type Product } from '@/types/marketplace';
 
 const NAME_MAX = 200;
@@ -56,8 +55,8 @@ function validate(form: FormState): { payload: Omit<Product, 'id' | 'seller_id' 
   if (form.stock.trim() === '' || !Number.isInteger(stock) || stock < 0) {
     return { error: 'Stock must be a whole number, zero or more.' };
   }
-  if (!Number.isFinite(weight) || weight <= 0 || Math.abs(weight * 100 - Math.round(weight * 100)) > 1e-9) {
-    return { error: 'Weight must be above zero, with at most two decimal places.' };
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 10000 || Math.abs(weight * 100 - Math.round(weight * 100)) > 1e-9) {
+    return { error: 'Weight must be above zero and no more than 10,000 kg, with at most two decimal places.' };
   }
   if (imageUrl && !/^https:\/\/\S+$/i.test(imageUrl)) {
     return { error: 'Image link must start with https://.' };
@@ -77,7 +76,6 @@ function validate(form: FormState): { payload: Omit<Product, 'id' | 'seller_id' 
 }
 
 export default function ProductFormModal({ product, onClose, onSaved }: ProductFormModalProps) {
-  const { user } = useAuth();
   const [form, setForm] = useState<FormState>(() => toFormState(product));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +97,15 @@ export default function ProductFormModal({ product, onClose, onSaved }: ProductF
     }
 
     setSaving(true);
-    const { error: saveError } = product
-      ? await supabase.from('products').update(result.payload).eq('id', product.id)
-      : await supabase.from('products').insert({ ...result.payload, seller_id: user?.id });
+    let saveError: unknown = null;
+    try {
+      await apiRequest(product ? `products/${product.id}` : 'products', {
+        method: product ? 'PATCH' : 'POST',
+        body: result.payload,
+      });
+    } catch (error) {
+      saveError = error;
+    }
     setSaving(false);
 
     if (saveError) {
@@ -182,6 +186,7 @@ export default function ProductFormModal({ product, onClose, onSaved }: ProductF
               type="number"
               inputMode="decimal"
               min={0.01}
+              max={10000}
               step={0.01}
               value={form.weight}
               onChange={(e) => update('weight', e.target.value)}

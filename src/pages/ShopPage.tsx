@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Loader2, Search, SearchX } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import ProductDetailModal from '@/components/ProductDetailModal';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { PRODUCT_CATEGORIES, type Product, type ProductCategory } from '@/types/marketplace';
 
 type ShopPageProps = {
@@ -23,17 +23,13 @@ export default function ShopPage({ onCartChange, onGoToCart }: ShopPageProps) {
 
   const loadProducts = useCallback(async () => {
     setLoadState('loading');
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error || !Array.isArray(data)) {
+    try {
+      const data = await apiRequest<Product[]>('products');
+      setProducts(data);
+      setLoadState('ready');
+    } catch {
       setLoadState('error');
-      return;
     }
-    setProducts(data as Product[]);
-    setLoadState('ready');
   }, []);
 
   useEffect(() => {

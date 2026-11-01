@@ -1,25 +1,30 @@
-# Lapak Kita — Clean Source
+# Lapak Kita
 
-This project is a React + TypeScript + Vite marketplace that uses Supabase for authentication, database access, and checkout.
+Lapak Kita is a React, TypeScript, and Vite marketplace deployed on Vercel. Its serverless API stores marketplace data and email/password accounts in Neon Postgres; database credentials stay server-side.
 
-## AI-related cleanup
+## Features
 
-- Removed the `.bolt` project configuration and prompt files.
-- Removed Bolt-hosted Open Graph and Twitter preview image references from `index.html`.
-- No AI model/API integration (such as OpenAI, Gemini, or Anthropic) was found in the application source code.
+- Product catalog with category filtering and search.
+- Email/password sign-up and sign-in, with secure HTTP-only database-backed sessions.
+- Seller listings, shopping cart, order history, and admin moderation.
+- Server-calculated checkout totals and atomic stock/order updates. Checkout is simulated; no real payments are processed.
 
-## Setup
+## Deploy with Vercel and Neon
 
-1. Install Node.js (LTS recommended).
-2. Run `npm install`.
-3. Create a `.env` file in the project root with your Supabase project settings:
+1. Import this repository into Vercel.
+2. In Vercel Marketplace, connect a Neon Postgres database to the Vercel project. Ensure `DATABASE_URL` is available to the project’s Functions.
+3. Run [`database/migrations/0001_neon_marketplace.sql`](./database/migrations/0001_neon_marketplace.sql) in the Neon SQL Editor. It creates the tables and checkout function and seeds eight sample products.
+4. Redeploy after setting environment variables. Vercel detects the Vite frontend and the API functions under `api/`.
+5. To grant administrator access, create and sign in to the intended account, then use the Neon SQL Editor to run `UPDATE users SET is_admin = TRUE WHERE email = 'your-account@example.com';`.
 
-   ```env
-   VITE_SUPABASE_URL=your_supabase_project_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
+The site build command is `npm run build`, with `dist` as the output directory.
 
-4. Run `npm run dev` to start the development server.
-5. Run `npm run build` to create a production build.
+## Local development
 
-The `.env` file from the uploaded archive is intentionally not included in this cleaned package. Add your own Supabase settings locally.
+Install dependencies, copy `.env.example` to `.env.local`, enter your Neon connection string, then run `npm run vercel:dev`. Sign in to Vercel when prompted. Apply the migration to the database before creating accounts. `npm run dev` starts only the Vite frontend and does not run the serverless API.
+
+## Authentication and account recovery
+
+Passwords are hashed with Node.js scrypt. Session tokens are random, stored as hashes in Postgres, and sent in HTTP-only, same-site cookies. Email verification and password-reset email delivery are not configured; add an email provider before enabling those flows. New accounts are never automatically made administrators.
+
+Existing Supabase accounts and data are not copied automatically. This migration creates a fresh Neon database with sample products; transfer any existing production data separately before switching users over.
