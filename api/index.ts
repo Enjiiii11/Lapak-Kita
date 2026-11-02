@@ -461,17 +461,20 @@ async function handleCart(req: ApiRequest, user: AppUser, route: string[]) {
 function parseBlobUploadBody(body: Record<string, unknown>): HandleUploadBody {
   if (body.type === 'blob.generate-client-token' && body.payload && typeof body.payload === 'object') {
     const payload = body.payload as Record<string, unknown>;
+    const pathname = payload.pathname;
+    const multipart = payload.multipart;
+    const clientPayload = payload.clientPayload;
     if (
-      typeof payload.pathname === 'string' &&
-      typeof payload.multipart === 'boolean' &&
-      (typeof payload.clientPayload === 'string' || payload.clientPayload === null)
+      typeof pathname === 'string' &&
+      typeof multipart === 'boolean' &&
+      (typeof clientPayload === 'string' || clientPayload === null)
     ) {
       return {
         type: 'blob.generate-client-token',
         payload: {
-          pathname: payload.pathname,
-          multipart: payload.multipart,
-          clientPayload: payload.clientPayload,
+          pathname,
+          multipart,
+          clientPayload,
         },
       };
     }
