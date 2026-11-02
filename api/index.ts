@@ -315,7 +315,8 @@ async function buildQuote(items: RequestedItem[], buyerId: string) {
 
 function parseRoute(req: ApiRequest) {
   const url = new URL(req.url ?? '/', 'https://vercel.local');
-  return url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
+  const rewrittenRoute = url.searchParams.get('route');
+  return (rewrittenRoute ?? url.pathname.replace(/^\/api\/?/, '')).split('/').filter(Boolean);
 }
 
 async function handleAuth(

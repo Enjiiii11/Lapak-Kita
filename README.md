@@ -14,7 +14,7 @@ Lapak Kita is a React, TypeScript, and Vite marketplace deployed on Vercel. Its 
 1. Import this repository into Vercel.
 2. In Vercel Marketplace, connect a Neon Postgres database to the Vercel project. Ensure `DATABASE_URL` is available to the project’s Functions.
 3. Run [`database/migrations/0001_neon_marketplace.sql`](./database/migrations/0001_neon_marketplace.sql) in the Neon SQL Editor. It creates the tables and checkout function and seeds eight sample products.
-4. Redeploy after setting environment variables. Vercel detects the Vite frontend and the API functions under `api/`.
+4. Redeploy after setting environment variables. Vercel detects the Vite frontend and routes API requests through the shared function in `api/index.ts`.
 5. To grant administrator access, create and sign in to the intended account, then use the Neon SQL Editor to run `UPDATE users SET is_admin = TRUE WHERE email = 'your-account@example.com';`.
 
 The site build command is `npm run build`, with `dist` as the output directory.
