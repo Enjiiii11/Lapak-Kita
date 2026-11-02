@@ -1,11 +1,15 @@
-import { useState, type FormEvent } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { upload } from '@vercel/blob/client';
+import { ImagePlus, Loader2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/lib/api';
 import { PRODUCT_CATEGORIES, type Product } from '@/types/marketplace';
 
 const NAME_MAX = 200;
 const DESCRIPTION_MAX = 2000;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 type ProductFormModalProps = {
   product: Product | null;
@@ -58,10 +62,6 @@ function validate(form: FormState): { payload: Omit<Product, 'id' | 'seller_id' 
   if (!Number.isFinite(weight) || weight <= 0 || weight > 10000 || Math.abs(weight * 100 - Math.round(weight * 100)) > 1e-9) {
     return { error: 'Weight must be above zero and no more than 10,000 kg, with at most two decimal places.' };
   }
-  if (imageUrl && !/^https:\/\/\S+$/i.test(imageUrl)) {
-    return { error: 'Image link must start with https://.' };
-  }
-
   return {
     payload: {
       name,
@@ -76,14 +76,57 @@ function validate(form: FormState): { payload: Omit<Product, 'id' | 'seller_id' 
 }
 
 export default function ProductFormModal({ product, onClose, onSaved }: ProductFormModalProps) {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormState>(() => toFormState(product));
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isEdit = product !== null;
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview(null);
+      return;
+    }
+    const preview = URL.createObjectURL(imageFile);
+    setImagePreview(preview);
+    return () => URL.revokeObjectURL(preview);
+  }, [imageFile]);
+
   const update = (field: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const selectImage = (file: File | undefined) => {
+    if (!file) return;
+    if (!IMAGE_CONTENT_TYPES.includes(file.type)) {
+      setError('Choose a JPG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setError('Image must be 5 MB or smaller.');
+      return;
+    }
+    setError(null);
+    setImageFile(file);
+    setForm((prev) => ({ ...prev, imageUrl: '' }));
+  };
+
+  const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    selectImage(event.dataTransfer.files[0]);
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setForm((prev) => ({ ...prev, imageUrl: '' }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -97,21 +140,32 @@ export default function ProductFormModal({ product, onClose, onSaved }: ProductF
     }
 
     setSaving(true);
-    let saveError: unknown = null;
     try {
+      let imageUrl = result.payload.image_url;
+      if (imageFile) {
+        if (!user) throw new Error('Please sign in again before uploading an image.');
+        setUploadProgress(0);
+        const safeFileName = imageFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+        const blob = await upload(`products/${user.id}/${crypto.randomUUID()}-${safeFileName}`, imageFile, {
+          access: 'public',
+          handleUploadUrl: '/api/blob-upload',
+          contentType: imageFile.type,
+          onUploadProgress: ({ percentage }) => setUploadProgress(Math.round(percentage)),
+        });
+        imageUrl = blob.url;
+      }
       await apiRequest(product ? `products/${product.id}` : 'products', {
         method: product ? 'PATCH' : 'POST',
-        body: result.payload,
+        body: { ...result.payload, image_url: imageUrl },
       });
     } catch (error) {
-      saveError = error;
-    }
-    setSaving(false);
-
-    if (saveError) {
-      setError('We could not save this product. Please try again.');
+      setError(error instanceof Error ? error.message : 'We could not save this product. Please try again.');
+      setSaving(false);
+      setUploadProgress(null);
       return;
     }
+    setSaving(false);
+    setUploadProgress(null);
     onSaved();
   };
 
@@ -196,16 +250,69 @@ export default function ProductFormModal({ product, onClose, onSaved }: ProductF
           </label>
         </div>
 
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-stone-700">Image link (optional)</span>
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-stone-700">Product image (optional)</span>
           <input
-            type="url"
-            value={form.imageUrl}
-            onChange={(e) => update('imageUrl', e.target.value)}
-            placeholder="https://..."
-            className={fieldClass}
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label="Choose a product image"
+            onChange={(event) => {
+              selectImage(event.target.files?.[0]);
+              event.target.value = '';
+            }}
           />
-        </label>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              disabled={saving}
+              className={`flex min-h-32 flex-1 items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-left transition ${
+                isDragging ? 'border-orange-500 bg-orange-50' : 'border-stone-300 bg-stone-50 hover:border-orange-400'
+              } disabled:opacity-70`}
+            >
+              {(imagePreview || form.imageUrl) ? (
+                <img
+                  src={imagePreview ?? form.imageUrl}
+                  alt="Product preview"
+                  className="h-24 w-24 rounded-lg object-cover"
+                />
+              ) : (
+                <ImagePlus className="h-8 w-8 shrink-0 text-orange-500" aria-hidden="true" />
+              )}
+              <span>
+                <span className="block font-medium text-stone-800">
+                  {imagePreview || form.imageUrl ? 'Drop to replace image' : 'Drag and drop an image'}
+                </span>
+                <span className="mt-1 block text-sm text-stone-500">or browse files · JPG, PNG, WebP · up to 5 MB</span>
+              </span>
+            </button>
+            {(imagePreview || form.imageUrl) && (
+              <button
+                type="button"
+                onClick={clearImage}
+                disabled={saving}
+                aria-label="Remove product image"
+                className="rounded-full border border-stone-200 p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 disabled:opacity-70"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {uploadProgress !== null && (
+            <p className="mt-2 text-sm text-stone-600" role="status">
+              Uploading image: {uploadProgress}%
+            </p>
+          )}
+        </div>
 
         {error && (
           <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
@@ -227,7 +334,7 @@ export default function ProductFormModal({ product, onClose, onSaved }: ProductF
             className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-70"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            {isEdit ? 'Save changes' : 'Publish product'}
+            {uploadProgress !== null ? 'Uploading image...' : isEdit ? 'Save changes' : 'Publish product'}
           </button>
         </div>
       </form>

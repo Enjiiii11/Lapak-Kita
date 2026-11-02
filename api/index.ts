@@ -1,13 +1,12 @@
 import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
+import type { IncomingMessage } from 'node:http';
 import process from 'node:process';
 
-type ApiRequest = {
-  method?: string;
-  url?: string;
+type ApiRequest = IncomingMessage & {
   body?: unknown;
-  headers: Record<string, string | string[] | undefined>;
 };
 
 type ApiResponse = {
@@ -43,6 +42,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 const MAX_WEIGHT_KG = 10000;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const CATEGORIES = ['Electronics', 'Fashion', 'Home', 'Sports', 'Books', 'Beauty', 'Food'];
 
 class ApiError extends Error {
@@ -457,6 +458,49 @@ async function handleCart(req: ApiRequest, user: AppUser, route: string[]) {
   throw new ApiError('Not found.', 404);
 }
 
+function parseBlobUploadBody(body: Record<string, unknown>): HandleUploadBody {
+  if (body.type === 'blob.generate-client-token' && body.payload && typeof body.payload === 'object') {
+    const payload = body.payload as Record<string, unknown>;
+    if (
+      typeof payload.pathname === 'string' &&
+      typeof payload.multipart === 'boolean' &&
+      (typeof payload.clientPayload === 'string' || payload.clientPayload === null)
+    ) {
+      return {
+        type: 'blob.generate-client-token',
+        payload: {
+          pathname: payload.pathname,
+          multipart: payload.multipart,
+          clientPayload: payload.clientPayload,
+        },
+      };
+    }
+  }
+  if (body.type === 'blob.upload-completed' && body.payload && typeof body.payload === 'object') {
+    return body as unknown as HandleUploadBody;
+  }
+  throw new ApiError('Invalid image upload request.', 400);
+}
+
+async function handleBlobUpload(req: ApiRequest) {
+  const body = parseBlobUploadBody(getBody(req));
+  return handleUpload({
+    request: req,
+    body,
+    onBeforeGenerateToken: async (pathname) => {
+      const user = await requireUser(req);
+      if (!pathname.startsWith(`products/${user.id}/`) || pathname.length > 512) {
+        throw new ApiError('Invalid image upload path.', 400);
+      }
+      return {
+        allowedContentTypes: IMAGE_CONTENT_TYPES,
+        maximumSizeInBytes: MAX_IMAGE_SIZE_BYTES,
+        addRandomSuffix: true,
+      };
+    },
+  });
+}
+
 async function handleRequest(req: ApiRequest, res: ApiResponse) {
   const segments = parseRoute(req);
   const [area, action] = segments;
@@ -467,6 +511,7 @@ async function handleRequest(req: ApiRequest, res: ApiResponse) {
   if (!area) throw new ApiError('Not found.', 404);
   if (method !== 'GET' && method !== 'HEAD') checkOrigin(req);
 
+  if (area === 'blob-upload' && segments.length === 1 && method === 'POST') return handleBlobUpload(req);
   if (area === 'auth') return handleAuth(req, res, action ?? '', secure);
 
   if (area === 'products' && method === 'GET') {

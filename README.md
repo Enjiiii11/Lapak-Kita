@@ -13,15 +13,16 @@ Lapak Kita is a React, TypeScript, and Vite marketplace deployed on Vercel. Its 
 
 1. Import this repository into Vercel.
 2. In Vercel Marketplace, connect a Neon Postgres database to the Vercel project. Ensure `DATABASE_URL` is available to the project’s Functions.
-3. Run [`database/migrations/0001_neon_marketplace.sql`](./database/migrations/0001_neon_marketplace.sql) in the Neon SQL Editor. It creates the tables and checkout function and seeds eight sample products.
-4. Redeploy after setting environment variables. Vercel detects the Vite frontend and routes API requests through the shared function in `api/index.ts`.
-5. To grant administrator access, create and sign in to the intended account, then use the Neon SQL Editor to run `UPDATE users SET is_admin = TRUE WHERE email = 'your-account@example.com';`.
+3. Create and connect a **public Vercel Blob store** to the project. Make sure `BLOB_READ_WRITE_TOKEN` is available to the project’s Functions for each deployment environment you use.
+4. Run [`database/migrations/0001_neon_marketplace.sql`](./database/migrations/0001_neon_marketplace.sql) in the Neon SQL Editor. It creates the tables and checkout function and seeds eight sample products.
+5. Redeploy after setting environment variables. Vercel detects the Vite frontend and routes API requests through the shared function in `api/index.ts`.
+6. To grant administrator access, create and sign in to the intended account, then use the Neon SQL Editor to run `UPDATE users SET is_admin = TRUE WHERE email = 'your-account@example.com';`.
 
 The site build command is `npm run build`, with `dist` as the output directory.
 
 ## Local development
 
-Install dependencies, copy `.env.example` to `.env.local`, enter your Neon connection string, then run `npm run vercel:dev`. Sign in to Vercel when prompted. Apply the migration to the database before creating accounts. `npm run dev` starts only the Vite frontend and does not run the serverless API.
+Install dependencies, copy `.env.example` to `.env.local`, enter your Neon connection string, then run `npm run vercel:dev`. Sign in to Vercel when prompted. For local image uploads, also make sure `BLOB_READ_WRITE_TOKEN` is configured for the Development environment and available to Vercel CLI; never commit this token. Apply the migration to the database before creating accounts. `npm run dev` starts only the Vite frontend and does not run the serverless API.
 
 ## Authentication and account recovery
 
