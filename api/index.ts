@@ -459,7 +459,8 @@ async function handleCart(req: ApiRequest, user: AppUser, route: string[]) {
 
 async function handleRequest(req: ApiRequest, res: ApiResponse) {
   const segments = parseRoute(req);
-  const [area, action, id] = segments;
+  const [area, action] = segments;
+  const productId = area === 'products' && segments.length === 2 ? action : undefined;
   const method = req.method ?? 'GET';
   const secure = header(req, 'x-forwarded-proto') === 'https';
 
@@ -497,7 +498,7 @@ async function handleRequest(req: ApiRequest, res: ApiResponse) {
     return send(res, 201, mapProduct(rows[0] as Record<string, unknown>));
   }
 
-  if (area === 'products' && id && UUID_PATTERN.test(id)) {
+  if (area === 'products' && productId && UUID_PATTERN.test(productId)) {
     if (method === 'PATCH') {
       const user = await requireUser(req);
       const product = parseProductBody(getBody(req));
@@ -506,7 +507,7 @@ async function handleRequest(req: ApiRequest, res: ApiResponse) {
         SET name = ${product.name}, description = ${product.description}, category = ${product.category},
           price_idr = ${product.price}, stock = ${product.stock}, weight_kg = ${product.weight},
           image_url = ${product.imageUrl}, updated_at = now()
-        WHERE id = ${id}::uuid AND seller_id = ${user.id}
+        WHERE id = ${productId}::uuid AND seller_id = ${user.id}
         RETURNING id, seller_id, name, description, category, price_idr, stock, weight_kg, image_url, created_at
       `;
       if (!rows.length) throw new ApiError('Product not found or you do not own this listing.', 404);
@@ -515,8 +516,8 @@ async function handleRequest(req: ApiRequest, res: ApiResponse) {
     if (method === 'DELETE') {
       const user = await requireUser(req);
       const rows = user.is_admin
-        ? await getDatabase()`DELETE FROM products WHERE id = ${id}::uuid RETURNING id`
-        : await getDatabase()`DELETE FROM products WHERE id = ${id}::uuid AND seller_id = ${user.id} RETURNING id`;
+        ? await getDatabase()`DELETE FROM products WHERE id = ${productId}::uuid RETURNING id`
+        : await getDatabase()`DELETE FROM products WHERE id = ${productId}::uuid AND seller_id = ${user.id} RETURNING id`;
       if (!rows.length) throw new ApiError('Product not found or you do not have permission to delete it.', 404);
       return { ok: true };
     }
