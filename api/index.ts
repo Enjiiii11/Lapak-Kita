@@ -96,15 +96,24 @@ function fail(res: ApiResponse, error: unknown) {
 }
 
 function getBody(req: ApiRequest): Record<string, unknown> {
-  if (typeof req.body === 'string') {
+  let rawBody: unknown;
+  try {
+    rawBody = req.body;
+  } catch (error) {
+    if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 400) {
+      throw new ApiError('Request body must be valid JSON.', 400);
+    }
+    throw error;
+  }
+  if (typeof rawBody === 'string') {
     try {
-      const body: unknown = JSON.parse(req.body);
+      const body: unknown = JSON.parse(rawBody);
       if (body && typeof body === 'object' && !Array.isArray(body)) return body as Record<string, unknown>;
     } catch {
       throw new ApiError('Request body must be valid JSON.', 400);
     }
-  } else if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
-    return req.body as Record<string, unknown>;
+  } else if (rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)) {
+    return rawBody as Record<string, unknown>;
   }
   throw new ApiError('A JSON request body is required.', 400);
 }
