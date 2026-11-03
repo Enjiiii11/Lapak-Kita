@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Package, ReceiptText, ShieldCheck, ShoppingBag, ShoppingCart, Store } from 'lucide-react';
+import { KeyRound, LogOut, Package, ReceiptText, ShieldCheck, ShoppingBag, ShoppingCart, Store } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import type { View } from '@/types/marketplace';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 type AppHeaderProps = {
   view: View;
@@ -21,6 +22,7 @@ const NAV_ITEMS: { view: View; label: string; icon: typeof ShoppingBag; adminOnl
 export default function AppHeader({ view, onNavigate, cartCount, isAdmin }: AppHeaderProps) {
   const { user, signOut } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -80,6 +82,15 @@ export default function AppHeader({ view, onNavigate, cartCount, isAdmin }: AppH
           </span>
           <button
             type="button"
+            onClick={() => setChangingPassword(true)}
+            className="flex items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-stone-300 hover:bg-stone-50"
+          >
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Change password</span>
+            <span className="sr-only sm:hidden">Change password</span>
+          </button>
+          <button
+            type="button"
             onClick={() => void signOut()}
             className="flex items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-stone-300 hover:bg-stone-50"
           >
@@ -88,6 +99,7 @@ export default function AppHeader({ view, onNavigate, cartCount, isAdmin }: AppH
           </button>
         </div>
       </div>
+      {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
     </header>
   );
 }

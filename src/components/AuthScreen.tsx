@@ -3,7 +3,7 @@ import { AlertCircle, Loader2, Lock, Mail, Store, User as UserIcon } from 'lucid
 import { apiRequest } from '@/lib/api';
 import { useAuth, type AuthUser } from '@/context/AuthContext';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'change-password';
 
 export const inputClass =
   'w-full rounded-xl border border-stone-200 bg-white py-3 pl-11 pr-4 text-stone-900 placeholder:text-stone-400 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100';
@@ -14,23 +14,52 @@ export default function AuthScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   const isSignup = mode === 'signup';
+  const isChangingPassword = mode === 'change-password';
 
   const changeMode = (next: Mode) => {
     setMode(next);
     setError(null);
+    setPasswordChanged(false);
   };
-
-  const switchMode = () => changeMode(isSignup ? 'signin' : 'signup');
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
 
     const trimmedEmail = email.trim();
+    if (isChangingPassword) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        setError('Enter your account email on the sign-in screen before changing your password.');
+        return;
+      }
+      if (!password || !newPassword) {
+        setError('Please enter your old password and new password.');
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        await apiRequest<{ ok: boolean }>('auth/change-password-with-credentials', {
+          method: 'POST',
+          body: { email: trimmedEmail, current_password: password, new_password: newPassword },
+        });
+        setPassword('');
+        setNewPassword('');
+        setPasswordChanged(true);
+      } catch (requestError) {
+        setError(requestError instanceof Error ? requestError.message : 'Password could not be changed. Please try again.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     if (!trimmedEmail || !password) {
       setError('Please enter your email and password.');
       return;
@@ -83,14 +112,32 @@ export default function AuthScreen() {
           </div>
 
           <h2 className="text-3xl font-extrabold text-stone-900">
-            {isSignup ? 'Create your account' : 'Welcome back'}
+            {isChangingPassword ? 'Change your password' : isSignup ? 'Create your account' : 'Welcome back'}
           </h2>
           <p className="mt-2 text-stone-600">
-            {isSignup ? 'Sign up to start shopping and selling.' : 'Sign in to continue to your marketplace.'}
+            {isChangingPassword
+              ? 'Enter your old password and new password. No email link is needed; we use the email already entered on the sign-in screen.'
+              : isSignup
+                ? 'Sign up to start shopping and selling.'
+                : 'Sign in to continue to your marketplace.'}
           </p>
 
+          {passwordChanged ? (
+            <div className="mt-8 space-y-4">
+              <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                Your password has been changed. Sign in with your new password.
+              </div>
+              <button
+                type="button"
+                onClick={() => changeMode('signin')}
+                className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600"
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="mt-8 space-y-4" noValidate>
-            {isSignup && (
+            {isSignup && !isChangingPassword && (
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-stone-700">Full name</span>
                 <div className="relative">
@@ -107,7 +154,7 @@ export default function AuthScreen() {
               </label>
             )}
 
-            <label className="block">
+            {!isChangingPassword && <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-stone-700">Email</span>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
@@ -120,8 +167,9 @@ export default function AuthScreen() {
                   className={inputClass}
                 />
               </div>
-            </label>
+            </label>}
 
+            {!isChangingPassword && (
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-stone-700">Password</span>
               <div className="relative">
@@ -131,11 +179,49 @@ export default function AuthScreen() {
                   autoComplete={isSignup ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 8 characters"
+                  placeholder={isSignup ? 'At least 8 characters' : undefined}
                   className={inputClass}
                 />
               </div>
             </label>
+            )}
+
+            {isChangingPassword && (
+              <>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-stone-700">Old password</span>
+                  <div className="relative">
+                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      maxLength={128}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-stone-700">New password</span>
+                  <div className="relative">
+                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      maxLength={128}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      className={inputClass}
+                    />
+                  </div>
+                </label>
+              </>
+            )}
 
             {error && (
               <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
@@ -150,20 +236,36 @@ export default function AuthScreen() {
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white shadow-sm transition hover:bg-orange-600 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-              {isSignup ? 'Create account' : 'Sign in'}
+              {isChangingPassword ? 'Update password' : isSignup ? 'Create account' : 'Sign in'}
             </button>
           </form>
+          )}
 
-          <p className="mt-6 text-center text-sm text-stone-600">
-            {isSignup ? 'Already have an account?' : "Don't have an account yet?"}{' '}
-            <button
-              type="button"
-              onClick={switchMode}
-              className="font-semibold text-orange-600 hover:text-orange-700"
-            >
-              {isSignup ? 'Sign in' : 'Create one'}
-            </button>
-          </p>
+          {!passwordChanged && (
+            <>
+              <p className="mt-6 text-center text-sm text-stone-600">
+                {isChangingPassword ? 'Remember your password?' : isSignup ? 'Already have an account?' : "Don't have an account yet?"}{' '}
+                <button
+                  type="button"
+                  onClick={() => changeMode(isChangingPassword ? 'signin' : isSignup ? 'signin' : 'signup')}
+                  className="font-semibold text-orange-600 hover:text-orange-700"
+                >
+                  {isChangingPassword ? 'Sign in' : isSignup ? 'Sign in' : 'Create one'}
+                </button>
+              </p>
+              {!isChangingPassword && (
+                <p className="mt-3 text-center text-sm">
+                  <button
+                    type="button"
+                    onClick={() => changeMode('change-password')}
+                    className="font-semibold text-orange-600 hover:text-orange-700"
+                  >
+                    Change password
+                  </button>
+                </p>
+              )}
+            </>
+          )}
         </div>
       </main>
     </div>

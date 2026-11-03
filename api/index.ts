@@ -265,7 +265,7 @@ async function enforceAuthRateLimit(req: ApiRequest, email: string) {
     RETURNING attempts
   `;
   const attempts = Number((rows[0] as { attempts: number }).attempts);
-  if (attempts > 10) throw new ApiError('Too many sign-in attempts. Please wait 15 minutes and try again.', 429);
+  if (attempts > 10) throw new ApiError('Too many authentication attempts. Please wait 15 minutes and try again.', 429);
 }
 
 function mapProduct(row: Record<string, unknown>) {
@@ -344,6 +344,95 @@ async function handleAuth(
     const token = cookieToken(req);
     if (token) await sql`DELETE FROM sessions WHERE token_hash = ${tokenDigest(token)}`;
     clearSessionCookie(res, secure);
+    return send(res, 200, { ok: true });
+  }
+  if (action === 'change-password' && req.method === 'POST') {
+    const user = await requireUser(req);
+    const body = getBody(req);
+    const currentPassword = typeof body.current_password === 'string' ? body.current_password : '';
+    const newPassword = typeof body.new_password === 'string' ? body.new_password : '';
+
+    if (currentPassword.length > PASSWORD_MAX_LENGTH) {
+      throw new ApiError('Current password is incorrect.', 401);
+    }
+    if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
+      throw new ApiError(`Password must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`, 400);
+    }
+    await enforceAuthRateLimit(req, user.email);
+
+    const rows = (await sql`
+      SELECT password_hash FROM users WHERE id = ${user.id} LIMIT 1
+    `) as Record<string, unknown>[];
+    const storedHash = rows[0]?.password_hash;
+    if (typeof storedHash !== 'string' || !verifyPassword(currentPassword, storedHash)) {
+      throw new ApiError('Current password is incorrect.', 401);
+    }
+    if (verifyPassword(newPassword, storedHash)) {
+      throw new ApiError('Choose a new password different from your current password.', 400);
+    }
+
+    const token = cookieToken(req);
+    if (!token) throw new ApiError('Please sign in again to continue.', 401);
+    const changed = await sql`
+      WITH updated AS (
+        UPDATE users
+        SET password_hash = ${passwordHash(newPassword)}
+        WHERE id = ${user.id} AND password_hash = ${storedHash}
+        RETURNING id
+      ), revoked AS (
+        DELETE FROM sessions
+        WHERE user_id IN (SELECT id FROM updated)
+          AND token_hash <> ${tokenDigest(token)}
+        RETURNING token_hash
+      )
+      SELECT id FROM updated
+    `;
+    if (!changed.length) throw new ApiError('Password changed in another request. Please try again.', 409);
+    return send(res, 200, { ok: true });
+  }
+  if (action === 'change-password-with-credentials' && req.method === 'POST') {
+    const body = getBody(req);
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const currentPassword = typeof body.current_password === 'string' ? body.current_password : '';
+    const newPassword = typeof body.new_password === 'string' ? body.new_password : '';
+
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new ApiError('Enter the account email address.', 400);
+    }
+    if (currentPassword.length > PASSWORD_MAX_LENGTH) {
+      throw new ApiError('Email or current password is incorrect.', 401);
+    }
+    if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
+      throw new ApiError(`Password must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`, 400);
+    }
+    await enforceAuthRateLimit(req, email);
+
+    const rows = (await sql`
+      SELECT id, password_hash FROM users WHERE email = ${email} LIMIT 1
+    `) as Record<string, unknown>[];
+    const row = rows[0];
+    const storedHash = row?.password_hash;
+    if (typeof storedHash !== 'string' || !verifyPassword(currentPassword, storedHash)) {
+      throw new ApiError('Email or current password is incorrect.', 401);
+    }
+    if (verifyPassword(newPassword, storedHash)) {
+      throw new ApiError('Choose a new password different from your current password.', 400);
+    }
+
+    const changed = await sql`
+      WITH updated AS (
+        UPDATE users
+        SET password_hash = ${passwordHash(newPassword)}
+        WHERE id = ${String(row.id)} AND password_hash = ${storedHash}
+        RETURNING id
+      ), revoked AS (
+        DELETE FROM sessions
+        WHERE user_id IN (SELECT id FROM updated)
+        RETURNING token_hash
+      )
+      SELECT id FROM updated
+    `;
+    if (!changed.length) throw new ApiError('Password changed in another request. Please try again.', 409);
     return send(res, 200, { ok: true });
   }
   if ((action === 'signup' || action === 'signin') && req.method === 'POST') {
