@@ -2,6 +2,8 @@
 
 Lapak Kita is a React, TypeScript, and Vite marketplace deployed on Vercel. Its serverless API stores marketplace data and email/password accounts in Neon Postgres; database credentials stay server-side.
 
+Live site: [https://lapak-kita-market.vercel.app/](https://lapak-kita-market.vercel.app/)
+
 ## Features
 
 - Product catalog with category filtering and search.
