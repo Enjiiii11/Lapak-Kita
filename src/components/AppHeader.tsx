@@ -31,7 +31,7 @@ export default function AppHeader({ view, onNavigate, cartCount, isAdmin }: AppH
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const displayName = user?.full_name ?? user?.email ?? 'Account';
+  const displayName = user?.full_name ?? 'Account';
 
   return (
     <header
@@ -77,9 +77,9 @@ export default function AppHeader({ view, onNavigate, cartCount, isAdmin }: AppH
         </nav>
 
         <div className="flex items-center gap-3">
-          <span className="hidden max-w-[10rem] truncate text-sm text-stone-600 md:inline" title={displayName}>
-            {displayName}
-          </span>
+          <div className="hidden max-w-[12rem] min-w-0 text-right md:block" title={displayName}>
+            <span className="block truncate text-sm font-medium text-stone-700">{displayName}</span>
+          </div>
           <button
             type="button"
             onClick={() => setChangingPassword(true)}

@@ -28,6 +28,8 @@ Install dependencies, copy `.env.example` to `.env.local`, enter your Neon conne
 
 Passwords are hashed with Node.js scrypt. Session tokens are random, stored as hashes in Postgres, and sent in HTTP-only, same-site cookies. Email verification and password-reset email delivery are not configured; add an email provider before enabling those flows. New accounts are never automatically made administrators.
 
+For privacy, the app clears any existing session when it loads. Users must enter their email and password again after opening or reloading the site; sign-in fields also disable browser autocomplete.
+
 Users can change their password from the signed-in header or the login/sign-up screen by entering only their old password and a new password; no inbox link is required. On the login/sign-up screen, the email entered on the sign-in form identifies the account. The old password is required to protect accounts from changes based on email alone, and active sessions are expired after a password change. Forgotten-password recovery remains disabled until a verified reset flow is configured.
 
 Existing Supabase accounts and data are not copied automatically. This migration creates a fresh Neon database with sample products; transfer any existing production data separately before switching users over.

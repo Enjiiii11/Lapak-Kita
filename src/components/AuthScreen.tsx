@@ -14,6 +14,8 @@ export default function AuthScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailEditable, setEmailEditable] = useState(false);
+  const [passwordEditable, setPasswordEditable] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,18 @@ export default function AuthScreen() {
   const isChangingPassword = mode === 'change-password';
 
   const changeMode = (next: Mode) => {
+    if (next === 'change-password') {
+      setPassword('');
+      setPasswordEditable(false);
+      setNewPassword('');
+    } else {
+      setFullName('');
+      setEmail('');
+      setPassword('');
+      setEmailEditable(false);
+      setPasswordEditable(false);
+      setNewPassword('');
+    }
     setMode(next);
     setError(null);
     setPasswordChanged(false);
@@ -71,11 +85,20 @@ export default function AuthScreen() {
 
     setSubmitting(true);
     try {
-      const { user } = await apiRequest<{ user: AuthUser }>(`auth/${isSignup ? 'signup' : 'signin'}`, {
+      const { user: signedInUser } = await apiRequest<{ user: AuthUser }>(`auth/${isSignup ? 'signup' : 'signin'}`, {
         method: 'POST',
         body: { email: trimmedEmail, password, full_name: fullName.trim() },
       });
-      acceptUser(user);
+      const { user: sessionUser } = await apiRequest<{ user: AuthUser | null }>('auth/session');
+      if (
+        !sessionUser ||
+        sessionUser.id !== signedInUser.id ||
+        sessionUser.email.trim().toLowerCase() !== trimmedEmail.toLowerCase()
+      ) {
+        await apiRequest<{ ok: boolean }>('auth/signout', { method: 'POST', body: {} });
+        throw new Error('The signed-in session did not match the email you entered. Please try again.');
+      }
+      acceptUser(sessionUser);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Sign-in failed. Please try again.');
     } finally {
@@ -136,7 +159,7 @@ export default function AuthScreen() {
               </button>
             </div>
           ) : (
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4" noValidate>
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4" autoComplete="off" noValidate>
             {isSignup && !isChangingPassword && (
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-stone-700">Full name</span>
@@ -144,7 +167,7 @@ export default function AuthScreen() {
                   <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
                   <input
                     type="text"
-                    autoComplete="name"
+                    autoComplete="off"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Dayan Singasatia"
@@ -159,8 +182,12 @@ export default function AuthScreen() {
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
                 <input
-                  type="email"
-                  autoComplete="email"
+                  type="text"
+                  inputMode="email"
+                  name={`marketplace-email-${mode}`}
+                  autoComplete="off"
+                  readOnly={!emailEditable}
+                  onFocus={() => setEmailEditable(true)}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -176,7 +203,10 @@ export default function AuthScreen() {
                 <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
                 <input
                   type="password"
-                  autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  name={`marketplace-password-${mode}`}
+                  autoComplete="new-password"
+                  readOnly={!passwordEditable}
+                  onFocus={() => setPasswordEditable(true)}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={isSignup ? 'At least 8 characters' : undefined}

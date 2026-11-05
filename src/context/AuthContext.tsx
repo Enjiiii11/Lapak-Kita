@@ -25,15 +25,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    apiRequest<{ user: AuthUser | null }>('auth/session')
-      .then(({ user }) => {
-        if (active) setSession(user ? { user } : null);
-      })
-      .catch(() => {
-        if (active) setSession(null);
+    apiRequest<{ ok: boolean }>('auth/signout', { method: 'POST', body: {} })
+      .catch((error) => {
+        console.error('Could not clear the previous marketplace session.', error);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setSession(null);
+          setLoading(false);
+        }
       });
 
     return () => {
