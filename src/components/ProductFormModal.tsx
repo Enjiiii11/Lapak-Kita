@@ -155,7 +155,7 @@ export default function ProductFormModal({ product, onClose, onSaved }: ProductF
         imageUrl = blob.url;
       }
       await apiRequest(product ? `products/${product.id}` : 'products', {
-        method: product ? 'PATCH' : 'POST',
+        method: product ? 'PUT' : 'POST',
         body: { ...result.payload, image_url: imageUrl },
       });
     } catch (error) {

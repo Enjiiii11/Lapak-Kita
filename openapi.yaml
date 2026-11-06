@@ -1,0 +1,1090 @@
+openapi: 3.1.0
+info:
+  title: Lapak Kita API
+  version: 1.0.0
+  description: |
+    OpenAPI specification for the Lapak Kita marketplace API.
+
+    The server URL is relative to this documentation host. Locally, run
+    `npm run vercel:dev` before using "Try it out". Vercel Preview deployments
+    require Vercel authentication. Checkout creates a real order unless
+    `dry_run` is set to `true`.
+servers:
+  - url: /api
+    description: API on the same host as this documentation
+tags:
+  - name: Authentication
+  - name: Products
+  - name: Cart
+  - name: Checkout
+  - name: Orders
+  - name: Uploads
+paths:
+  /auth/session:
+    get:
+      tags: [Authentication]
+      operationId: getSession
+      summary: Get the current session
+      description: Returns the signed-in user, or `null` when no valid session cookie is present.
+      responses:
+        '200':
+          description: Current session state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    oneOf:
+                      - $ref: '#/components/schemas/User'
+                      - type: 'null'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/signup:
+    post:
+      tags: [Authentication]
+      operationId: signUp
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 128
+                full_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+      responses:
+        '201':
+          description: Account created and session started
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: An account with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/signin:
+    post:
+      tags: [Authentication]
+      operationId: signIn
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/signout:
+    post:
+      tags: [Authentication]
+      operationId: signOut
+      summary: Sign out and clear the session cookie
+      responses:
+        '200':
+          description: Session ended
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearedSessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      operationId: changePassword
+      summary: Change the signed-in user's password
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed; other sessions are revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Password was changed by another request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/change-password-with-credentials:
+    post:
+      tags: [Authentication]
+      operationId: changePasswordWithCredentials
+      summary: Change a password using account credentials
+      description: Revokes all active sessions after a successful password change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, current_password, new_password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                current_password:
+                  type: string
+                  format: password
+                  maxLength: 128
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Password was changed by another request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/forgot:
+    post:
+      tags: [Authentication]
+      operationId: requestPasswordReset
+      summary: Request a password reset
+      description: Password reset email delivery is not configured; this endpoint currently returns 501.
+      responses:
+        '501':
+          description: Password reset is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /products:
+    get:
+      tags: [Products]
+      operationId: listProducts
+      summary: List marketplace products
+      responses:
+        '200':
+          description: Products, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags: [Products]
+      operationId: createProduct
+      summary: Create a product listing
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Listing created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    put:
+      tags: [Products]
+      operationId: replaceProduct
+      summary: Replace a listing owned by the signed-in user
+      description: Replaces the listing fields; omitted description and image_url use their defaults.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Listing replaced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Listing not found or not owned by the current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    patch:
+      tags: [Products]
+      operationId: updateProduct
+      summary: Update a listing owned by the signed-in user
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Listing updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Listing not found or not owned by the current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags: [Products]
+      operationId: deleteProduct
+      summary: Delete a listing
+      description: The listing owner or an administrator can delete a listing.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Listing deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Listing not found or deletion not permitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /seller/products:
+    get:
+      tags: [Products]
+      operationId: listSellerProducts
+      summary: List the signed-in user's listings
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Listings owned by the current user, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /cart:
+    get:
+      tags: [Cart]
+      operationId: getCart
+      summary: Get the signed-in user's cart
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Cart lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CartLine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags: [Cart]
+      operationId: addCartItem
+      summary: Add a product to the signed-in user's cart
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, quantity]
+              properties:
+                product_id:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 999
+      responses:
+        '200':
+          description: Item added (quantity is capped at available stock)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Cannot add own product or product is sold out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /cart/{cartItemId}:
+    parameters:
+      - $ref: '#/components/parameters/CartItemId'
+    patch:
+      tags: [Cart]
+      operationId: updateCartItem
+      summary: Change a cart item's quantity
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 999
+      responses:
+        '200':
+          description: Quantity updated (capped at available stock)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: Cart item is no longer available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags: [Cart]
+      operationId: removeCartItem
+      summary: Remove an item from the cart
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Cart item removed (also succeeds if it was already absent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /cart-count:
+    get:
+      tags: [Cart]
+      operationId: getCartCount
+      summary: Get the total number of units in the cart
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Cart item quantity total
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count:
+                    type: integer
+                    minimum: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /checkout:
+    post:
+      tags: [Checkout]
+      operationId: checkout
+      summary: Preview checkout totals or place an order
+      description: |
+        Set `dry_run` to `true` to calculate totals without creating an order.
+        If omitted or `false`, this endpoint places an order and reduces stock.
+        This application simulates checkout and does not process real payments.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  description: Product IDs must also be unique across the array.
+                  items:
+                    type: object
+                    required: [product_id, quantity]
+                    properties:
+                      product_id:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 999
+                dry_run:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Checkout quote returned without placing an order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutQuote'
+        '201':
+          description: Order placed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: Product unavailable, insufficient stock, or buying own listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /orders:
+    get:
+      tags: [Orders]
+      operationId: listOrders
+      summary: List the signed-in user's orders
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Orders, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /blob-upload:
+    post:
+      tags: [Uploads]
+      operationId: handleBlobUpload
+      summary: Request or complete a product image upload
+      description: |
+        Vercel Blob client upload protocol. A token request requires a signed-in
+        user and a pathname prefixed with `products/{userId}/`. Only JPEG, PNG,
+        and WebP files up to 5 MiB are allowed. The upload-completed callback
+        does not require the session cookie.
+      security:
+        - sessionCookie: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [type, payload]
+                  properties:
+                    type:
+                      const: blob.generate-client-token
+                    payload:
+                      type: object
+                      required: [pathname, multipart, clientPayload]
+                      properties:
+                        pathname:
+                          type: string
+                          maxLength: 512
+                        multipart:
+                          type: boolean
+                        clientPayload:
+                          type: [string, 'null']
+                - type: object
+                  required: [type, payload]
+                  properties:
+                    type:
+                      const: blob.upload-completed
+                    payload:
+                      type: object
+                      additionalProperties: true
+      responses:
+        '200':
+          description: Vercel Blob upload protocol response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/ServerError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: lapak_session
+      description: HTTP-only session cookie set by sign-up/sign-in responses.
+  parameters:
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CartItemId:
+      name: cartItemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  headers:
+    SessionCookie:
+      description: HTTP-only, same-site session cookie (30-day expiry).
+      schema:
+        type: string
+    ClearedSessionCookie:
+      description: Clears the session cookie.
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request body or field value
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Sign-in required or credentials are incorrect
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Request origin is not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: Too many authentication attempts; wait 15 minutes
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: Database or required service is not configured
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    User:
+      type: object
+      required: [id, email, full_name, is_admin]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        is_admin:
+          type: boolean
+    AuthResult:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          format: password
+          maxLength: 128
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+    Product:
+      type: object
+      required:
+        - id
+        - seller_id
+        - name
+        - description
+        - category
+        - price_idr
+        - stock
+        - weight_kg
+        - image_url
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        seller_id:
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        category:
+          $ref: '#/components/schemas/ProductCategory'
+        price_idr:
+          type: integer
+          minimum: 0
+          maximum: 1000000000
+        stock:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        weight_kg:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 10000
+          multipleOf: 0.01
+        image_url:
+          oneOf:
+            - type: string
+              format: uri
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+    ProductInput:
+      type: object
+      required: [name, category, price_idr, stock, weight_kg]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+          default: ''
+        category:
+          $ref: '#/components/schemas/ProductCategory'
+        price_idr:
+          type: integer
+          minimum: 0
+          maximum: 1000000000
+        stock:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        weight_kg:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 10000
+          multipleOf: 0.01
+        image_url:
+          oneOf:
+            - type: string
+              format: uri
+              maxLength: 2048
+              pattern: '^https://'
+            - type: 'null'
+          default: null
+    ProductCategory:
+      type: string
+      enum: [Electronics, Fashion, Home, Sports, Books, Beauty, Food]
+    CartLine:
+      type: object
+      required: [id, product_id, quantity, product]
+      properties:
+        id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        product:
+          $ref: '#/components/schemas/Product'
+    QuoteLine:
+      type: object
+      required: [product_id, product_name, unit_price_idr, quantity, line_total_idr]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        product_name:
+          type: string
+        unit_price_idr:
+          type: integer
+        quantity:
+          type: integer
+        line_total_idr:
+          type: integer
+    UsageMeter:
+      type: object
+      required: [metric, quantity, unit_rate_idr, cost_idr]
+      properties:
+        metric:
+          type: string
+          enum: [units, weight_kg]
+        quantity:
+          type: number
+        unit_rate_idr:
+          type: integer
+        cost_idr:
+          type: integer
+    CheckoutQuote:
+      type: object
+      required: [dry_run, lines, meters, subtotal_idr, usage_cost_idr, total_idr]
+      properties:
+        dry_run:
+          type: boolean
+          const: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteLine'
+        meters:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageMeter'
+        subtotal_idr:
+          type: integer
+        usage_cost_idr:
+          type: integer
+        total_idr:
+          type: integer
+    CheckoutResult:
+      type: object
+      required:
+        - dry_run
+        - order_id
+        - lines
+        - meters
+        - subtotal_idr
+        - usage_cost_idr
+        - total_idr
+      properties:
+        dry_run:
+          type: boolean
+          const: false
+        order_id:
+          type: string
+          format: uuid
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteLine'
+        meters:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageMeter'
+        subtotal_idr:
+          type: integer
+        usage_cost_idr:
+          type: integer
+        total_idr:
+          type: integer
+    OrderItem:
+      allOf:
+        - $ref: '#/components/schemas/QuoteLine'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+            product_id:
+              oneOf:
+                - type: string
+                  format: uuid
+                - type: 'null'
+    Order:
+      type: object
+      required: [id, status, total_idr, created_at, order_items, usage_meters]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [paid]
+        total_idr:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        order_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        usage_meters:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageMeter'

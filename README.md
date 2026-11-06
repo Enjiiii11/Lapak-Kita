@@ -9,6 +9,30 @@ Lapak Kita is a React, TypeScript, and Vite marketplace deployed on Vercel. Its 
 - Seller listings, shopping cart, order history, and admin moderation.
 - Server-calculated checkout totals and atomic stock/order updates. Checkout is simulated; no real payments are processed.
 
+## REST API and usage metering
+
+The API uses JSON request and response bodies. The complete endpoint, schema, and response documentation is in [`openapi.yaml`](./openapi.yaml). After starting `npm run vercel:dev`, open `http://localhost:3000/api-docs.html` for the interactive Swagger UI. The UI sends "Try it out" requests to the same host.
+
+The product endpoints support `GET /products`, `POST /products`, `PUT /products/{productId}`, `PATCH /products/{productId}`, and `DELETE /products/{productId}`. Product creation and modification require a signed-in user; only the owner can modify a listing, while administrators can also delete listings.
+
+Checkout meters two usage dimensions:
+
+- Units: total item quantity multiplied by IDR 2,000 per unit.
+- Weight: total product weight multiplied by quantity, rounded to 0.01 kg, then multiplied by IDR 5,000 per kg.
+
+The total is the product subtotal plus both usage costs. To demonstrate the calculation without creating an order or reducing stock, send `POST /checkout` with `"dry_run": true`. Replace the example UUID with an existing product ID from `GET /products`:
+
+```json
+{
+  "items": [
+    { "product_id": "00000000-0000-4000-8000-000000000001", "quantity": 2 }
+  ],
+  "dry_run": true
+}
+```
+
+For a demo, sign in, list products, create a listing, update it using `PUT` (or `PATCH`), remove it using `DELETE`, then request a dry-run checkout quote. A normal checkout is simulated but creates an order and reduces inventory; do not use it just to demonstrate metering.
+
 ## Deploy with Vercel and Neon
 
 1. Import this repository into Vercel.

@@ -645,7 +645,7 @@ async function handleRequest(req: ApiRequest, res: ApiResponse) {
   }
 
   if (area === 'products' && productId && UUID_PATTERN.test(productId)) {
-    if (method === 'PATCH') {
+    if (method === 'PUT' || method === 'PATCH') {
       const user = await requireUser(req);
       const product = parseProductBody(getBody(req));
       const rows = await getDatabase()`
