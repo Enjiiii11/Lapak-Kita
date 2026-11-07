@@ -44,6 +44,10 @@ For a demo, sign in, list products, create a listing, update it using `PUT` (or 
 
 The site build command is `npm run build`, with `dist` as the output directory.
 
+## Tests and checks
+
+Run the automated unit tests with `npm test`. The suite covers API request behavior, checkout billing requests, and display formatting. Run `npm run typecheck` to check TypeScript types and `npm run lint` to check code style.
+
 ## Local development
 
 Install dependencies, copy `.env.example` to `.env.local`, enter your Neon connection string, then run `npm run vercel:dev`. Sign in to Vercel when prompted. For local image uploads, also make sure `BLOB_READ_WRITE_TOKEN` is configured for the Development environment and available to Vercel CLI; never commit this token. Apply the migration to the database before creating accounts. `npm run dev` starts only the Vite frontend and does not run the serverless API.
